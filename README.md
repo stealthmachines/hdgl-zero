@@ -1,1 +1,1 @@
-The 'files(0-3)' as folders are not the same as their originating zips which carry the same namesake.
+The 'files(0-3)' as folders are not the same as their originating zip's which carry the same namesake.
