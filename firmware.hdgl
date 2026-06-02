@@ -1,0 +1,184 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# HDGL Native Firmware Language - .hdgl Source
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# This IS firmware source, not C code.
+# It compiles to x86 assembly via the HDGL compiler.
+#
+# Philosophy: Glyph is the machine. Every action is a rewrite.
+#
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ROOT GYPHL - THE MACHINE ITSELF
+# ═══════════════════════════════════════════════════════════════════════════
+
+glyph root
+    id = 0
+    class = ROOT
+    state = INIT
+    cap = {}
+end
+
+# ═══════════════════════════════════════════════════════════════════════════
+# PRIMITIVE BRANCHES - CREATE HIERARCHY
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Create CPU glyph under ROOT
+glyph cpu
+    parent = root
+    id = cpu_auto()
+    class = CPU
+    state = INIT
+    cap = { EXEC, MULT, SSE }
+end
+
+# Create Memory glyph under ROOT
+glyph memory
+    parent = root
+    id = mem_auto()
+    class = MEM
+    state = INIT
+    cap = { READ, WRITE }
+end
+
+# Create IO glyph under ROOT
+glyph io
+    parent = root
+    id = io_auto()
+    class = IO
+    state = INIT
+    cap = { DMA, INT }
+end
+
+# ═══════════════════════════════════════════════════════════════════════════
+# PRIMITIVE RECURSION - DISCOVER HARDWARE
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Discover CPU via CPUID
+recurse cpu
+    mutate discovered
+    mutate executed
+end
+
+# Discover Memory via E820
+recurse memory
+    mutate discovered
+    mutate ready
+end
+
+# Discover PCI via config space walk
+glyph pci
+    parent = io
+    id = pci_auto()
+    class = IO
+    subtype = PCI
+    state = INIT
+    cap = { DMA, INT, MEM_MAP }
+end
+
+recurse pci
+    # Each PCI device discovered through mutation
+    mutate discovered
+    mutate ready
+end
+
+# ═══════════════════════════════════════════════════════════════════════════
+# PRIMITIVE BRANCHING - ADD DEVICES
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Add GPU under PCI
+glyph gpu
+    parent = pci
+    id = gpu_auto()
+    class = IO
+    subtype = GPU
+    state = INIT
+    cap = { RENDER, VIDEO, ACCEL }
+end
+
+branch pci gpu
+
+# Add Storage under PCI
+glyph storage
+    parent = pci
+    id = storage_auto()
+    class = STORAGE
+    state = INIT
+    cap = { READ, WRITE, EXECUTE }
+end
+
+branch pci storage
+
+# ═══════════════════════════════════════════════════════════════════════════
+# PRIMITIVE CONFIGURATION - SETUP DEVICES
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Configure CPU (enable features, set control registers)
+mutate cpu configured
+mutate cpu executed
+
+# Configure Memory (set base address, size, attributes)
+mutate memory configured
+mutate memory ready
+
+# Configure PCI devices (enable interrupts, DMA, etc.)
+recurse pci
+    mutate configured
+    mutate ready
+end
+
+# Configure Storage (program AHCI/NVMe registers)
+mutate storage configured
+mutate storage ready
+
+# ═══════════════════════════════════════════════════════════════════════════
+# PRIMITIVE EXECUTION - LOAD AND TRANSFER
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Create bootloader glyph
+glyph bootloader
+    parent = storage
+    id = bootloader_auto()
+    class = BOOT
+    state = INIT
+    cap = { LOAD, EXECUTE, TRANSFER }
+end
+
+# Load boot sector from storage
+branch storage bootloader
+mutate bootloader discovered
+
+# Load boot sector (sector 0) into bootloader glyph
+# This would call: read_sector(storage, 0, buffer)
+mutate bootloader loaded
+
+# Verify bootloader signature (0x55AA)
+mutate bootloader verified
+
+# Set entry point to bootloader (0x7C00 for real mode, or GDT selector for protected)
+mutate bootloader executed
+
+# ═══════════════════════════════════════════════════════════════════════════
+# END OF HDGL SOURCE
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# This file would be compiled by:
+#   hdglc firmware.hdgl -o firmware.o
+#
+# Then assembled to x86:
+#   ld firmware.o -o firmware.bin
+#
+# And flashed to BIOS:
+#   flashrom -w firmware.bin -p spiflash:...
+#
+# The HDGL compiler would generate:
+#   - CPUID instructions for CPU discovery
+#   - E820 map parsing for memory
+#   - PCI config space reads for device enumeration
+#   - UART writes for output
+#   - Boot sector read for payload loading
+#   - Far jump for control transfer
+#
+# All from this pure glyph source, no C, no assembly.
+# ═══════════════════════════════════════════════════════════════════════════

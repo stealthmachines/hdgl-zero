@@ -1,0 +1,338 @@
+
+# ============================================================================
+# HDGL SELF-BOOTLOADER - NATIVE SELF-REPLICATING FIRMWARE
+# ============================================================================
+#
+# This IS the bootloader. It boots itself, loads HDGL code, and self-replicates.
+#
+# ============================================================================
+
+# ============================================================================
+# BOOT SECTOR - 0x7C00 ENTRY POINT
+# ============================================================================
+
+glyph boot_stub
+    id = BOOT_STUB
+    class = BOOT
+    state = INIT
+    cap = { LOAD, EXECUTE, SELF_REPLICATE }
+end
+
+# ============================================================================
+# PRIMITIVE 1: SELF-EXTRACTOR - LOAD HDGL BYTECODE FROM STORAGE
+# ============================================================================
+
+self_extract_module
+    source = "hdgl_runtime_core.hdg"
+    target = "ram:0x1000"
+    size = 512
+    
+    phase 1: locate_storage
+        recurse storage_glyphs
+            mutate found
+        end
+        
+    phase 2: read_sectors
+        read_sector 0x010
+        read_sector 0x011
+        read_sector 0x012
+        
+    phase 3: extract_to_ram
+        transfer ram:0x1000
+        verify_checksum
+        
+    phase 4: initialize_runtime
+        create_omega_root
+        allocate_glyph_tree
+        setup_execution_stack
+        
+end
+
+# ============================================================================
+# PRIMITIVE 2: OMEGA RUNTIME - GLYPH INTERPRETER CORE
+# ============================================================================
+
+omega_runtime
+    id = OMEGA_ROOT
+    class = RUNTIME
+    state = INIT
+    cap = { PARSE, EXECUTE, MUTATE }
+    
+    glyph_parser
+        pattern = glyph + IDENTIFIER + ATTRIBUTES + end
+        action = create_glyph
+    end
+    
+    glyph_executor
+        pattern = execute + GLYPH_NAME
+        action = dispatch_glyph
+    end
+    
+    glyph_mutator
+        pattern = mutate + STATE
+        action = update_state
+    end
+    
+end
+
+# ============================================================================
+# PRIMITIVE 3: SELF-REPLICATION ENGINE
+# ============================================================================
+
+self_replicate_engine
+    id = SELF_REP
+    class = REPLICATION
+    state = DISCOVERED
+    cap = { READ, WRITE, MODIFY, PERSIST }
+    
+    entry replicate_hdgl
+        phase 1: read_current_version
+            source = "hdgl_bootloader.hdg"
+            target = "ram:0x2000"
+        end
+        
+        phase 2: analyze_code
+            recurse glyph_tree
+                mutate analyzed
+            end
+            detect_self_modifications
+            calculate_version_hash
+            
+        phase 3: modify_code
+            recurse mutation_rules
+                mutate optimized
+            end
+            add_timestamp
+            increment_version
+            
+        phase 4: write_back
+            target = "hdgl_bootloader.hdg"
+            overwrite = true
+            preserve_signature = 0xAA55
+            
+        phase 5: persist_to_storage
+            write_to_mbr
+            update_partition_table
+            create_backup
+    end
+    
+end
+
+# ============================================================================
+# PRIMITIVE 4: STORAGE MANAGEMENT
+# ============================================================================
+
+storage_manager
+    id = STORAGE_ROOT
+    class = STORAGE
+    state = INIT
+    cap = { READ, WRITE, DELETE, LIST }
+    
+    glyph mbr
+        id = MBR_0
+        class = BOOT_RECORD
+        state = CONFIGURED
+        cap = { LOAD, EXECUTE }
+    end
+    
+    glyph partition_table
+        id = PT_0
+        class = PARTITION
+        state = INIT
+        cap = { MOUNT, UNMOUNT }
+    end
+    
+    glyph hdgl_runtime
+        id = HDGL_0
+        class = HDGL_FILE
+        state = INIT
+        cap = { EXECUTE, PARSE }
+    end
+    
+    glyph code_storage
+        id = CODE_0
+        class = CODE_SEGMENT
+        state = INIT
+        cap = { WRITE, PROTECT }
+    end
+    
+end
+
+# ============================================================================
+# PRIMITIVE 5: BOOTSTRAP SEQUENCE
+# ============================================================================
+
+bootstrap_sequence
+    id = BOOTSEQ
+    class = BOOTSTRAP
+    state = INIT
+    cap = { INITIALIZE, EXECUTE, RECURSE }
+    
+    entry boot_hdgl_system
+        phase 1: load_own_code
+            self_extract_module
+                execute self_extract_module
+            end
+            
+        phase 2: initialize_omega
+            create_omega_root
+            allocate_glyph_tree
+            setup_memory_management
+            initialize_heap
+            initialize_stack
+            
+        phase 3: load_core_runtime
+            read "hdgl_runtime_core.hdg"
+            execute hdgl_runtime
+            initialize_interpreter
+            
+        phase 4: load_user_program
+            read "user_program.hdg"
+            if exists
+                execute user_program
+            else
+                execute default_program
+            end
+            
+        phase 5: initialize_self_replication
+        create self_replicate_engine
+            register mutation_callbacks
+            enable_auto_update
+            set_persistence_mode
+        end
+        
+        phase 6: enter_main_loop
+            while true
+                wait_int08h
+                handle_interrupt
+                check_self_modification
+                update_runtime
+            end
+    end
+    
+end
+
+# ============================================================================
+# PRIMITIVE 6: DEFAULT USER PROGRAM - SELF-REPLICATION DEMO
+# ============================================================================
+
+default_program
+    id = DEFAULT_PRG
+    class = USER_PROGRAM
+    state = INIT
+    cap = { DISPLAY, REPLICATE, OPTIMIZE }
+    
+    entry demo_self_replication
+        display "HDGL Self-Bootloader v1.0"
+        display "Initializing Omega Runtime..."
+        
+        create glyph cpu
+            class = CPU
+            state = CONFIGURED
+        end
+        
+        create glyph memory
+            class = MEM
+            state = CONFIGURED
+        end
+        
+        create glyph storage
+            class = STORAGE
+            state = CONFIGURED
+        end
+        
+        recurse cpu
+            mutate discovered
+            mutate executed
+        end
+        
+        recurse memory
+            mutate discovered
+            mutate ready
+        end
+        
+        recurse storage
+            mutate discovered
+            mutate mounted
+        end
+        
+        display "Omega Runtime Initialized"
+        display "Glyph Tree: CPU, MEM, STORAGE"
+        display "Self-Replication: ENABLED"
+        display "Waiting for input..."
+        
+        while true
+            wait_key
+            if key == 'r'
+                execute self_replicate_engine
+                display "Self-replication completed"
+            end
+        end
+    end
+    
+end
+
+# ============================================================================
+# PRIMITIVE 7: EXIT HANDLER - TRANSFER TO OPERATING SYSTEM
+# ============================================================================
+
+exit_handler
+    id = EXIT_0
+    class = TRANSFER
+    state = INIT
+    cap = { HANDOFF, REBOOT, HALT }
+    
+    entry handoff_to_os
+        if os_detected
+            transfer_control os_bootloader
+        else
+            reboot_system
+        end
+    end
+    
+end
+
+# ============================================================================
+# SELF-COMPILATION LOOP - COMPILER COMPILES ITSELF
+# ============================================================================
+
+self_compile_loop
+    input = "hdgl_bootloader.hdg"
+    output = "hdgl_bootloader_v2.hdg"
+    
+    entry compile_hdgl_bootloader
+        phase self_hosting
+            execute hdgl_self_hosting_compiler
+                input = "hdgl_bootloader.hdg"
+                output = "hdgl_bootloader_v2.hdg"
+        end
+    end
+    
+end
+
+# ============================================================================
+# END OF HDGL SELF-BOOTLOADER
+# ============================================================================
+#
+# This firmware:
+#   1. Boots itself from sector 0
+#   2. Loads HDGL runtime from storage
+#   3. Executes HDGL bytecode
+#   4. Self-replicates and optimizes
+#   5. Persists across reboots
+#
+# Boot sequence:
+#   - BIOS loads sector 0 to 0x7C00
+#   - Execution transfers to HDGL stub
+#   - Stub loads HDGL core from sectors 16-18
+#   - Runtime initializes Omega glyph tree
+#   - User program executes
+#   - Self-replication runs on each boot
+#
+# Storage layout (sectors):
+#   0-1: Bootloader (512 bytes each)
+#   16-18: HDGL Runtime Core
+#   19-22: HDGL Bootloader Source
+#   23+: Code Storage / Runtime Data
+#
+# ============================================================================

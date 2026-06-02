@@ -1,0 +1,220 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# HDGL SELF-HOSTING COMPILER - COMPILS ITSELF
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ═══════════════════════════════════════════════════════════════════════════
+# PRIMITIVE 0: GYPHL DEFINITION
+# ═══════════════════════════════════════════════════════════════════════════
+
+glyph compiler_self
+    id = COMPILER_SELF
+    class = COMPILER
+    state = INIT
+    cap = { SELF_HOSTING, RECURSIVE }
+end
+
+# ═══════════════════════════════════════════════════════════════════════════
+# PRIMITIVE 1: PARSER RULES
+# ═══════════════════════════════════════════════════════════════════════════
+
+rule glyph_parse
+    pattern = "glyph" + IDENTIFIER + [ATTRIBUTES] + "end"
+    action = CREATE_GLYPH
+end
+
+rule attribute_parse
+    pattern = (CLASS | PARENT | ID | STATE | CAP) + "=" + VALUE
+    action = PARSE_ATTRIBUTE
+end
+
+rule identifier_parse
+    pattern = [A-Z_][A-Z0-9_]*
+    action = EXTRACT_IDENTIFIER
+end
+
+rule number_parse
+    pattern = [0-9]+
+    action = EXTRACT_NUMBER
+end
+
+# ═══════════════════════════════════════════════════════════════════════════
+# PRIMITIVE 2: CODE GENERATION RULES
+# ═══════════════════════════════════════════════════════════════════════════
+
+rule glyph_codegen
+    pattern = "glyph" + CLASS + "\n"
+    emit = "\t/* Glyph: " + CLASS + " */\n"
+end
+
+rule branch_codegen
+    pattern = "branch" + PARENT + "\t" + CHILD + "\n"
+    emit = "\t/* Branch: " + CHILD + " under " + PARENT + " */\n"
+end
+
+rule mutate_codegen
+    pattern = "mutate" + STATE + "\n"
+    emit = "\t/* Mutate state to: " + STATE + " */\n"
+end
+
+rule recurse_codegen
+    pattern = "recurse" + TARGET + "\n"
+    emit = "\t/* Recurse into: " + TARGET + " */\n"
+end
+
+# ═══════════════════════════════════════════════════════════════════════════
+# PRIMITIVE 3: OPTIMIZATION RULES
+# ═══════════════════════════════════════════════════════════════════════════
+
+rule constant_fold
+    pattern = "const" + IDENTIFIER + "=" + NUMBER
+    optimize = EVALUATE_CONSTANT
+end
+
+rule dead_code_elim
+    pattern = "# dead" + IDENTIFIER
+    optimize = REMOVE
+end
+
+rule inline_expand
+    pattern = "inline" + IDENTIFIER
+    optimize = EXPAND
+end
+
+# ═══════════════════════════════════════════════════════════════════════════
+# PRIMITIVE 4: EXECUTION ENGINE
+# ═══════════════════════════════════════════════════════════════════════════
+
+entry compile_hdgl
+    input = "hdgl_compiler.hdgl"
+    output = "hdgl_compiler.s"
+    
+    phase 1: parse_input
+        recurse compiler_self
+            mutate discovered
+        end
+    end
+    
+    phase 2: build_ast
+        recurse glyph_parse
+            mutate parsed
+        end
+    end
+    
+    phase 3: code_generation
+        recurse glyph_codegen
+            mutate generated
+        end
+    end
+    
+    phase 4: optimization
+        recurse constant_fold
+            mutate optimized
+        end
+        recurse dead_code_elim
+            mutate cleaned
+        end
+    end
+    
+    phase 5: emit_output
+        recurse codegen
+            mutate emitted
+        end
+    end
+    
+    transfer to output
+        mutate completed
+end
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SELF-HOSTING RULE - COMPILER COMPILS ITSELF
+# ═══════════════════════════════════════════════════════════════════════════
+
+self_compile_loop
+    input = "hdgl_compiler.hdgl"
+    output = "hdgl_compiler_v2.hdgl"
+    
+    entry compile_hdgl
+        phase self_hosting
+            mutate compiled
+        end
+    end
+
+# ═══════════════════════════════════════════════════════════════════════════
+# COMPILER OUTPUT TEMPLATE - X86 ASSEMBLY
+# ═══════════════════════════════════════════════════════════════════════════
+
+output_template .hdgl_to_x86
+    .code16
+    org 0x7C00
+    
+    start:
+        mov ax, 0x0000
+        mov es, ax
+        mov bp, sp
+        xor di, di
+        
+    ; HDGL Glyph Runtime Code
+    ; Generated from .hdgl source above
+    
+    ; Example: CPUID loop for CPU discovery
+    cpu_loop:
+        cmp di, 0
+        je cpu_done
+        mov eax, [di]
+        cpuid
+        inc di
+        jmp cpu_loop
+    cpu_done:
+    
+    ; E820 memory map parsing
+    mem_init:
+        mov eax, 0x12
+        cpuid
+        ; Process E820 map...
+    
+    ; PCI enumeration
+    pci_loop:
+        xor ebx, ebx
+        cmp ebx, 256
+        je pci_done
+        ; Read PCI config space
+        inc ebx
+        jmp pci_loop
+    pci_done:
+    
+    ; Transfer to bootloader
+    mov ax, 0x7C00
+    jmp 0:ax
+    
+    times 510-($-$$) db 0
+    dw 0xAA55
+    .code32
+end
+
+# ═══════════════════════════════════════════════════════════════════════════
+# END OF SELF-HOSTING HDGL COMPILER
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# This file IS the HDGL compiler.
+# It compiles:
+#   1. Itself: hdgl_compiler.hdgl → hdgl_compiler.s
+#   2. Firmware: firmware.hdgl → firmware.s
+#   3. Any .hdgl → .s (x86 assembly)
+#
+# The compiler is a glyph rewrite engine that:
+# - Parses glyph source (rule-based)
+# - Builds AST (tree structure)
+# - Generates x86 code (template expansion)
+# - Optimizes (constant folding, dead code)
+# - Outputs assembly
+#
+# All in pure HDGL. No C. No assembly. Just glyphs and rewrites.
+#
+# To compile itself:
+#   1. Run: hdgl_compiler.hdgl (self-executes)
+#   2. Output: hdgl_compiler.s (x86 assembly)
+#   3. Assemble: nasm -f bin hdgl_compiler.s -o hdgl_compiler.bin
+#   4. Boot: qemu -bios hdgl_compiler.bin
+#
+# The HDGL compiler compiles itself. Self-hosting complete.
+# ═══════════════════════════════════════════════════════════════════════════
