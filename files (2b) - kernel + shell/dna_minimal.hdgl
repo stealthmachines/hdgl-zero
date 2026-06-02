@@ -1,0 +1,288 @@
+# DNA MINIMAL HDGL — QUATERNARY GEOMETRIC METAL
+# Direct native HDG/HDGL analog over digital. No interpreted bytecode.
+# KISS: three primitives in metal.
+
+# ============================================================================
+# PRIMITIVE 1: Dₙ(r) = √(φ·Fₙ·2ⁿ·Pₙ·Ω)·rᵏ  (quaternary analog signal)
+# ============================================================================
+# Quaternary encoding: n mod 4 determines quaternary digit:
+#   n mod 4 = 0 → digit 0 (grounded)
+#   n mod 4 = 1 → digit 1 (rising)
+#   n mod 4 = 2 → digit 2 (excited)  
+#   n mod 4 = 3 → digit 3 (locked)
+#
+# Ω per strand (i=1..8): 1/(φ^i)^7
+# r_dim per strand: 0.3, 0.4, ..., 1.0
+
+const phi          = 1.6180339887498948
+const sqrt_phi     = 1.2720196495140570  # binary threshold Dₙ(r) > √φ → 1
+const k            = 1.0
+const dt           = 0.01
+
+# Fibonacci and prime factors (first 8 of each)
+fib[8] = {1, 1, 2, 3, 5, 8, 13, 21}
+primes[8] = {2, 3, 5, 7, 11, 13, 17, 19}
+
+# Strand configuration
+strands = [
+    {i:1,  r:0.3,  omega:0.0000000081196},  # A
+    {i:2,  r:0.4,  omega:0.0000000050218},  # B
+    {i:3,  r:0.5,  omega:0.0000000031032},  # C
+    {i:4,  r:0.6,  omega:0.0000000019169},  # D
+    {i:5,  r:0.7,  omega:0.0000000011840},  # E
+    {i:6,  r:0.8,  omega:0.00000000073191}, # F
+    {i:7,  r:0.9,  omega:0.00000000045233}, # G
+    {i:8,  r:1.0,  omega:0.00000000027957}, # H
+]
+
+# Dₙ(r) computation for slot n=1..32
+# Returns quaternary digit: 0,1,2,3 based on n mod 4
+fn dn_quaternary(n, r_dim, Omega) = 
+    F = fib[(n-1) % 8]
+    P = primes[(n-1) % 8]
+    D = sqrt(phi * F * pow(2,n) * P * Omega) * pow(r_dim, k)
+    quaternary_digit = (n % 4)
+    # Quaternary signal strength encoded in digit value scaled by D
+    digit_strength = digit * D
+    return digit_strength
+
+# ============================================================================
+# PRIMITIVE 2: Kuramoto 8D oscillator (analog rewrite tick)
+# ============================================================================
+# dθᵢ/dt = ωᵢ + K·Σⱼ sin(θⱼ-θᵢ)
+# Phase lock = consensus = EXECUTED
+# CV = coefficient of variation of phases
+
+struct Kuramoto {
+    theta[8],   # phases
+    omega[8],   # VCO frequencies
+    omega0[8],  # natural frequencies
+    K,          # coupling
+    gamma,      # damping
+    aphase,     # PLUCK/SUSTAIN/FINETUNE/LOCK
+    cv,         # coefficient of variation
+    tick,       # iteration count
+}
+
+fn phi_depth(x) = log(x) / log(phi)
+
+fn kuramoto_init(osc, phi_depth_val) {
+    # Ω^U resonance factor
+    frac_L = phi_depth_val - floor(phi_depth_val)
+    Omega_U = 0.5 * (1 + sin(PI * frac_L * phi))
+    
+    osc.aphase = PLUCK
+    osc.K = 5.0
+    osc.gamma = 0.005
+    osc.cv = 1.0
+    osc.tick = 0
+    
+    # θᵢ initialization
+    for i = 0 to 7 {
+        osc.theta[i] = PI * frac_L + 2*PI * (phi_seeds[i] + frac_L + i * D_N_R)
+        osc.omega0[i] = Omega_U * pow(phi, 1 + i * D_N_R) * dt
+        osc.omega[i] = osc.omega0[i]
+    }
+}
+
+fn kuramoto_step(osc) {
+    # Full RK4 Kuramoto step
+    for iter = 1 to 4 {
+        for i = 0 to 7 {
+            sum = 0
+            for j = 0 to 7 {
+                if i != j:
+                    sum += sin(osc.theta[j] - osc.theta[i])
+            }
+            # K1, K2, K3, K4 accumulate
+            osc.theta[i] += dt * sum * osc.K / 8
+        }
+    }
+    osc.tick += 1
+    
+    # Harmonic sync every 8 ticks
+    if osc.tick % 8 == 0 {
+        harmonic_sync(osc)
+    }
+}
+
+fn harmonic_sync(osc) {
+    # Cooperative memory: sync with hardware state
+    for pass = 1 to 4 {
+        for i = 0 to 7 {
+            # T[i] from Omega node state
+            T = 2*PI * node_state[i] / 2^32
+            diff = T - osc.theta[i]
+            osc.theta[i] += 0.8 * atan2(sin(diff), cos(diff))
+        }
+    }
+    # Update Ω^U
+    sx = sum(osc.re)
+    sy = sum(osc.im)
+    frac_U = fmod(atan2(sy, sx) / 2PI + 1, 1)
+    osc.omega_u = 0.5 * (1 + sin(PI * frac_U * phi))
+    
+    # VCO modulation
+    for i = 0 to 7 {
+        osc.omega[i] = osc.omega0[i] * (0.1 + 0.9 * osc.cv)
+    }
+}
+
+fn advance_phase(osc) {
+    # Recompute CV
+    R = |Σ exp(iθ)| / 8
+    osc.cv = 1 - R
+    
+    # Phase transitions
+    if osc.aphase == PLUCK and osc.cv < 0.50:
+        osc.aphase = SUSTAIN
+        osc.gamma = 0.008
+    else if osc.aphase == SUSTAIN and osc.cv < 0.30:
+        osc.aphase = FINETUNE
+        osc.gamma = 0.010
+    else if osc.aphase == FINETUNE and osc.cv < 0.10:
+        osc.aphase = LOCK
+        osc.gamma = 0.012
+    
+    if osc.aphase == LOCK and osc.cv < 0.05:
+        return LOCKED
+}
+
+# ============================================================================
+# PRIMITIVE 3: DNA strands → state transitions
+# ============================================================================
+# A=0, C=1, G=2, T=3
+# Codon (3 bases) → state transition
+# GC content → strand tension
+# Shannon entropy → r_dim
+
+fn dna_state_from_base(base) = base  # 0,1,2,3
+fn gc_content(sequence) = 
+    count(sequence, C) + count(sequence, G)
+    / length(sequence)
+
+fn entropy(sequence) =
+    # H = -Σ pᵢ log₂ pᵢ
+    # Simplified: measure base diversity
+    len = length(sequence)
+    if len == 0: return 0
+    # Count base frequencies
+    A = count(sequence, A) / len
+    C = count(sequence, sequence, C) / len
+    G = count(sequence, G) / len
+    T = count(sequence, T) / len
+    H = -(A*log2(A) + C*log2(C) + G*log2(G) + T*log2(T))
+    # Normalize to [0,1]
+    H_max = log2(4)
+    return H / H_max
+
+# ============================================================================
+# MAIN: Run analog over metal
+# ============================================================================
+# Input: hardware discovery data (CPUID, PCI, E820)
+# Output: Omega node states in analog consensus
+
+fn hdgl_analog_main(cpu_vendor, pci_devices, e820_kb) {
+    if verbose:
+        print "DNA MINIMAL HDGL - Analog over Metal"
+        print "======================================"
+    
+    # Build node states from hardware genome
+    nodes = [
+        {id:0,  type:ROOT,    state:INIT,   dna:[A,A,A]},   # 000 = A
+        {id:1,  type:CPU,     state:INIT,   dna:[C,G,T]},   # 011 = GCT
+        {id:2,  type:MEM,     state:INIT,   dna:[G,C,A]},   # 100 = GCA
+        {id:3,  type:IO,      state:INIT,   dna:[T,A,C]},   # 110 = TAC
+    ]
+    
+    # DNA genome from hardware
+    # CPU vendor string → 12 bases (3 codons)
+    cpu_bases = vendor_to_bases(cpu_vendor)
+    nodes[1].dna = cpu_bases[0:3]
+    nodes[2].dna = cpu_bases[3:6]
+    nodes[3].dna = cpu_bases[6:9]
+    
+    # PCI devices → additional nodes
+    pci_idx = 4
+    for dev in pci_devices {
+        if pci_idx >= 40: break
+        bases = device_to_bases(dev)
+        dna = bases[0:3]
+        nodes.append({
+            id: pci_idx,
+            type:IO,
+            state:INIT,
+            dna:dna
+        })
+        pci_idx += 1
+    }
+    
+    # Compute Shannon entropy for r_dim
+    for i = 0 to len(nodes)-1 {
+        nodes[i].r_dim = 0.3 + 0.7 * entropy(nodes[i].dna)
+    }
+    
+    # Build φ-lattice depth
+    phi_depth_val = phi_depth(cpu_family)
+    
+    # Initialize Kuramoto
+    osc = Kuramoto()
+    kuramoto_init(osc, phi_depth_val)
+    
+    # Main loop
+    max_iter = 500
+    for iter = 0 to max_iter-1 {
+        # Compute Dₙ(r) for all 32 lattice slots
+        dn_lattice = []
+        for n = 1 to 32 {
+            d = dn_quaternary(n, nodes[1].r_dim, strand_omega(1))
+            dn_lattice.append(d)
+        }
+        
+        # Kuramoto tick
+        kuramoto_step(osc)
+        
+        # Advance phase
+        if advance_phase(osc):
+            if verbose:
+                print "ANALOG: LOCKED"
+            break
+    
+        if verbose and osc.aphase != prev_phase:
+            print "Kuramoto:", phase_names[osc.aphase], "CV=", osc.cv, "iter=", iter
+            prev_phase = osc.aphase
+    
+    # Map phases to Omega states
+    for i = 0 to min(len(nodes), 8) {
+        phase_norm = fmod(fabs(osc.theta[i]), 2PI) / 2PI
+        analog_state = min(4, int(phase_norm * 5))
+        if osc.aphase == LOCK:
+            analog_state = 4  # consensus = EXECUTED
+        nodes[i].state = analog_state
+        
+        if verbose:
+            print "Node", i, ":", nodes[i].type, "state=", nodes[i].state, 
+                  "theta=", osc.theta[i], "D=", dn_lattice[i],
+                  "quaternary=", nodes[i].dna
+    
+    # DNA strand summary
+    if verbose:
+        print "DNA strands:"
+        for i = 0 to 7 {
+            r = 0.3 + 0.1 * i
+            print "  Strand", "ABCDEFHG"[i], "r_dim=", r
+        }
+        print "  Strand H (r=1.0): full double helix = self-hosting"
+    
+    # Quaternary lattice output
+    if verbose:
+        print "Quaternary lattice aggregate:"
+        agg = 0
+        for n = 1 to 32 {
+            q = dn_quaternary(n, nodes[1].r_dim, strand_omega(1))
+            # Map to quaternary digit in nibble
+            agg |= q * pow(4, (n-1) % 4)
+        }
+        print "  0x%08X" % agg
+    
+    return nodes

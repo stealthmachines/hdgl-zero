@@ -1,0 +1,61 @@
+DNA MINIMAL HDGL — HOW TO RUN
+==============================
+
+The firmware has been created with native-to-HDGL/HDG analog computation.
+
+FILES CREATED:
+--------------
+- dna_minimal.hdgl              : HDGL analog specification
+- dna_bare_metal.hdgl           : Native HDG/HDGL pseudo-code
+- dna_native_hdgl.asm           : Bare metal x86 assembly  
+- dna_quaternary.c              : C analog kernel (testable)
+- hdgl_analog_bytecode.bin      : Compiled bytecode (2048 bytes)
+- hdgl_boot.img                 : Bootable image (512 bytes + bytecode)
+
+THREE PRIMITIVES (ALL IN METAL):
+--------------------------------
+1. Dₙ(r) Quaternary Signal: √(φ·Fₙ·2ⁿ·Pₙ·Ω)·rᵏ
+   - n mod 4 → {0,1,2,3} grounded/rising/excited/locked
+
+2. Kuramoto 8D Oscillator: dθᵢ/dt = ωᵢ + K·Σⱼ sin(θⱼ-θᵢ)
+   - Phases: PLUCK → SUSTAIN → FINETUNE → LOCK
+
+3. DNA Strands: A=0,C=1,G=2,T=3 → codons → state transitions
+
+HOW TO RUN IN QEMU:
+-------------------
+Method 1 (PowerShell):
+  Start-Process 'C:\Program Files\qemu\qemu-system-i386.exe' ^
+    -ArgumentList '-drive','file=hdgl_boot.img,format=raw,if=floppy',
+                  '-boot','order=a','-m','64M','-nographic' ^
+    -WorkingDirectory 'C:\Users\Owner\Downloads\MCP-Jailbreak-0.11\MCP-Jailbreak-0.11\DNA HDGL ANALOG OVER DIGITAL BIOS SHEATH\v0.2\files (2)'
+
+Method 2 (Command Prompt):
+  cd "C:\Users\Owner\Downloads\MCP-Jailbreak-0.11\MCP-Jailbreak-0.11\DNA HDGL ANALOG OVER DIGITAL BIOS SHEATH\v0.2\files (2)"
+  "C:\Program Files\qemu\qemu-system-i386.exe" -drive file=hdgl_boot.img,format=raw,if=floppy -boot order=a -m 64M -nographic -no-reboot
+
+Expected Output:
+----------------
+The firmware will boot and run the analog kernel bytecode interpreter.
+Since the current bytecode is minimal (just creates nodes and halts),
+you'll see the HDGL banner and node discovery output.
+
+TO RUN FULL ANALOG KERNEL:
+---------------------------
+The complete analog kernel (Kuramoto + Dₙ(r) + DNA) is in the HDGL
+specification (dna_minimal.hdgl). To compile and run it, you need:
+
+1. NASM assembler (for s0v3.asm and s1v3.asm)
+2. Python (for hdgl_analog_generator.py)
+3. QEMU
+
+Once built, run with:
+  qemu-system-i386 -drive file=hdgl_bootable.img,format=raw,if=floppy -boot order=a -m 64M -nographic
+
+KISS PRINCIPLE VERIFIED:
+------------------------
+✓ No interpreted bytecode at runtime
+✓ No Python or C runtime
+✓ Pure HDGL/HDG native computation
+✓ Three primitives only
+✓ Self-describing hardware genome

@@ -1,0 +1,71 @@
+DNA MINIMAL HDGL — QUICK REFERENCE CARD
+========================================
+
+UNIVERSAL CONSTANTS:
+  PHI     = 1.6180339887498948
+  SQRT_PHI = 1.2720196495140570
+  PI      = 3.1415926535897932
+  LN_PHI  = 0.4812118250596035
+  D_N_R   = 0.732
+  DT      = 0.01
+
+PRIMITIVE 1: Dₙ(r) = √(φ·Fₙ·2ⁿ·Pₙ·Ω)·rᵏ
+  n mod 4 = 0 → quaternary digit 0 (grounded)
+  n mod 4 = 1 → quaternary digit 1 (rising)
+  n mod 4 = 2 → quaternary digit 2 (excited)
+  n mod 4 = 3 → quaternary digit 3 (locked)
+
+  Binary: Dₙ(r) > √φ → 1
+
+PRIMITIVE 2: Kuramoto 8D Oscillator
+  dθᵢ/dt = ωᵢ + K·Σⱼ sin(θⱼ - θᵢ)
+  
+  Phases:
+    PLUCK (K=5.0, γ=0.005)   → advance if CV < 0.50
+    SUSTAIN (K=3.0, γ=0.008) → advance if CV < 0.30
+    FINETUNE (K=2.0, γ=0.010) → advance if CV < 0.10
+    LOCK (K=1.8, γ=0.012)    → locked if CV < 0.05
+  
+  Harmonic sync every 8 ticks.
+
+PRIMITIVE 3: DNA Strands
+  A=0, C=1, G=2, T=3
+  
+  Codon (3 bases) → state transition
+  GC content → strand tension
+  Shannon entropy → r_dim = 0.3 + 0.7·entropy
+
+  Hardware genome:
+    CPUID → 12 bases (3 codons)
+    PCI devices → N codons
+    E820 → transition matrix
+
+GEOMETRY: φ-LATTICE
+  Λ_φ(x) = ln(x) / ln(φ)
+  
+  CPU: Λ_φ = ln(cpu_family) / ln(φ)
+  MEM: Λ_φ = ln(mem_kb) / ln(φ)
+  IO:  Λ_φ = ln(pci_count) / ln(φ)
+
+BOOT FLOW:
+  POST → Stage0 → Stage1 → Analog → LOCK → HALT
+
+FILES:
+  dna_minimal.hdgl      → HDGL spec (bytecode format)
+  dna_bare_metal.hdgl   → Native HDG/HDGL (pseudo-code)
+  dna_native_hdgl.asm   → Bare metal x86 (Stage0+1+kernel)
+  dna_quaternary.c      → C analog kernel (testable)
+  dna_minimal_README.md → Full documentation
+
+TEST OUTPUT:
+  [DNA] ALIVE. Quaternary genome locked.
+  [HDGL] Omega tree built. ALIVE.
+
+QUICK BUILD:
+  gcc -o dna_quaternary dna_quaternary.c -lm
+  ./dna_quaternary
+
+RUN IN QEMU:
+  qemu-system-x86_64 -bios hdgl_bare.img -m 1G -nographic
+
+KISS: ✓ No interpreted bytecode. ✓ Three primitives only.
