@@ -1,0 +1,220 @@
+# ============================================================================
+# NATIVE PARSER - PURE HDGL IMPLEMENTATION
+# ============================================================================
+# This glyph IS the parser. Reads .hdgl, builds Omega graph, emits x86.
+# ============================================================================
+
+glyph native_parser
+    id          = PARSER
+    class       = CODEGEN
+    state       = INIT
+    cap         = { PARSE, EMIT, SELF_HOSTING }
+
+entry parse_source
+    phase read_file
+        source      = argv[1]
+        target      = buffer:self_source
+        advance     = DISCOVERED
+    end
+    
+    phase tokenize
+        transform   = SPLIT_ON_WHITESPACE
+        advance     = CONFIGURED
+    end
+end
+
+entry build_omega
+    phase parse_glyph
+        rule match_glyph_block
+            pattern = "glyph" IDENTIFIER ATTRIBUTES "end"
+            action = CREATE_OMEGA_NODE
+        end
+        
+        rule extract_class
+            pattern = "class" "=" CLASS_NAME
+            action = SET_TYPE
+        end
+    end
+    
+    phase parse_rule
+        rule match_rule_block
+            pattern = "rule" IDENTIFIER BODY "end"
+            action = CREATE_TRANSFORM_RULE
+        end
+    end
+    
+    phase link_graph
+        rule link_children
+            pattern = "branch" PARENT_NAME CHILD_NAME
+            action = CREATE_BRANCH
+        end
+    end
+    
+    phase apply_rules
+        rule tick_graph
+            action = APPLY_ONE_TICK
+        end
+    end
+end
+
+entry emit_asm
+    phase walk_and_emit
+        rule emit_root
+            pattern = omega_node TYPE_ROOT
+            action = EMIT_ROOT_CODE
+        end
+        
+        rule emit_cpu
+            pattern = omega_node TYPE_CPU
+            action = EMIT_CPU_CODE
+        end
+        
+        rule emit_mem
+            pattern = omega_node TYPE_MEM
+            action = EMIT_MEM_CODE
+        end
+        
+        rule emit_io
+            pattern = omega_node TYPE_IO
+            action = EMIT_IO_CODE
+        end
+        
+        rule emit_compiler
+            pattern = omega_node TYPE_COMPILER
+            action = EMIT_COMPILER_CODE
+        end
+    end
+    
+    phase finalize
+        rule write_output
+            target = argv[2]
+            action = WRITE_ASM_FILE
+        end
+    end
+end
+
+rule token_glyph
+    pattern = "glyph"
+    action = PARSING_MODE:GLYPH
+end
+
+rule token_rule
+    pattern = "rule"
+    action = PARSING_MODE:RULE
+end
+
+rule token_class
+    pattern = "class"
+    action = PARSING_MODE:CLASS
+end
+
+rule token_state
+    pattern = "state"
+    action = PARSING_MODE:STATE
+end
+
+rule token_end
+    pattern = "end"
+    action = CLOSE_BLOCK
+end
+
+# ============================================================================
+# TYPE MAPPINGS
+# ============================================================================
+
+TYPE_MAP = {
+    "root"    : TYPE_ROOT,
+    "cpu"     : TYPE_CPU,
+    "memory"  : TYPE_MEM,
+    "mem"     : TYPE_MEM,
+    "io"      : TYPE_IO,
+    "compiler": TYPE_COMPILER,
+    "runtime" : TYPE_RUNTIME,
+    "boot"    : TYPE_BOOT,
+    "storage" : TYPE_STORAGE,
+    "gpu"     : TYPE_GPU,
+    "pci"     : TYPE_PCI,
+    "replicate": TYPE_REPLICATION,
+}
+
+STATE_MAP = {
+    "init"         : STATE_INIT,
+    "discovered"   : STATE_DISCOVERED,
+    "configured"   : STATE_CONFIGURED,
+    "ready"        : STATE_READY,
+    "executed"     : STATE_EXECUTED,
+    "completed"    : STATE_COMPLETED,
+}
+
+# ============================================================================
+# EMIT RULES (Transform Actions)
+# ============================================================================
+
+action EMIT_ROOT_CODE
+    emit
+        ; Root node initialization
+        mov  edi, OMEGA_BASE
+        mov  dword [edi], 0
+        mov  word  [edi + 8], TYPE_ROOT
+        mov  dword [edi + 12], STATE_DISCOVERED
+    end
+end
+
+action EMIT_CPU_CODE
+    emit
+        ; CPU node discovery
+        mov  edi, OMEGA_NODE(1)
+        mov  dword [edi], 1
+        mov  word  [edi + 8], TYPE_CPU
+        mov  dword [edi + 12], STATE_INIT
+        mov  dword [edi + 24], OMEGA_BASE
+        mov  dword [edi + 48], TRANSFORM_CPUID
+        mov  dword [edi + 12], STATE_EXECUTED
+    end
+end
+
+action EMIT_MEM_CODE
+    emit
+        ; Memory node discovery
+        mov  edi, OMEGA_NODE(2)
+        mov  dword [edi], 2
+        mov  word  [edi + 8], TYPE_MEM
+        mov  dword [edi + 12], STATE_INIT
+        mov  dword [edi + 24], OMEGA_BASE
+        mov  dword [edi + 48], TRANSFORM_E820
+        mov  dword [edi + 12], STATE_READY
+    end
+end
+
+action EMIT_IO_CODE
+    emit
+        ; IO node discovery
+        mov  edi, OMEGA_NODE(3)
+        mov  dword [edi], 3
+        mov  word  [edi + 8], TYPE_IO
+        mov  dword [edi + 12], STATE_INIT
+        mov  dword [edi + 24], OMEGA_BASE
+        mov  dword [edi + 48], TRANSFORM_PCI_WALK
+        mov  dword [edi + 12], STATE_CONFIGURED
+    end
+end
+
+action EMIT_COMPILER_CODE
+    emit
+        ; Compiler node - self-hosting
+        mov  edi, OMEGA_NODE(4)
+        mov  dword [edi], 4
+        mov  word  [edi + 8], TYPE_COMPILER
+        mov  dword [edi + 24], OMEGA_BASE
+        mov  dword [edi + 48], TRANSFORM_COMPILE_SELF
+        mov  dword [edi + 12], STATE_EXECUTED
+    end
+end
+
+# ============================================================================
+# HELPER MACROS
+# ============================================================================
+
+%macro OMEGA_NODE 1
+    (OMEGA_BASE + (%1) * OMEGA_SIZE)
+%endmacro

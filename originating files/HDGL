@@ -1,0 +1,48 @@
+#  HDGL: Native High-Dimensional Glyph Language
+
+# --- Core Data Type ---
+Glyph ::= [
+    X, Y, Z, M,            # spatial / signal
+    ΔDNA, ΔBase4096,       # symbolic / computational
+    phi, F_n, P_n, 2^n,    # harmonic / fractal
+    s, C, Omega, m, h, E, F, V,  # physical / temporal
+    D_n_r, k               # recursive / self-similar
+]
+
+# --- Primitive Operations ---
+mutate(Glyph g, Glyph delta)      -> Glyph    # vector addition
+branch(Glyph g, int index)        -> Glyph    # scaled branching
+recurse(Glyph g)                  -> Glyph    # recursive self-similarity
+
+# --- Recursive Identity ---
+r_n(Glyph g)                      -> scalar
+    = sqrt(phi * Omega * F_n * 2^n * P_n)
+
+r_recursive(Glyph prev, Glyph curr) -> scalar
+    = prev * sqrt(2 * P_n * F_n / F_prev)
+
+# --- Glyph Tree Propagation ---
+propagate(Glyph g, int depth) -> Tree:
+    if depth == 0 return []
+    mutated   = mutate(g, Δ_vector(g))
+    branched  = branch(g, 1)
+    recursive = recurse(g)
+    children  = [mutated, branched, recursive]
+    return children + propagate_each(children, depth - 1)
+
+# --- Environment / Execution ---
+# 1. One Seed Glyph suffices to initialize the language
+# 2. Operations are fully numeric and self-contained
+# 3. Tree grows recursively, carrying all harmonic, physical, and symbolic info
+# 4. Turing-complete via ΔDNA + ΔBase4096 + recursion
+# 5. Minimal and self-describing: no component can be removed
+
+# --- Example Seed Glyph ---
+Seed = Glyph(
+    X=0.5, Y=0.5, Z=0.5, M=1.0,
+    ΔDNA=0.1, ΔBase4096=0.2,
+    phi=1.618, F_n=1.0, P_n=2.0, 2^n=2.0,
+    s=0.618, C=0.236, Omega=0.142, m=0.445,
+    h=0.015, E=0.024, F=0.053, V=0.056,
+    D_n_r=0.732, k=1.0
+)
