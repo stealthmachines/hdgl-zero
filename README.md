@@ -26,6 +26,28 @@ OMEGA_STATE:
 
     times 512 dd 0   ; LATTICE + GRAPH + IO FUSED FIELD
 
+; ─────────────────────────────────────────────
+; UNIFIED STATE VECTOR (Ω)
+; ─────────────────────────────────────────────
+; This replaces:
+;   0x101020 lattice
+;   OMEGA_BASE graph
+;   IO buffers
+;   process table
+; ─────────────────────────────────────────────
+
+OMEGA_STATE:
+    dd 0          ; tick
+    dd 0          ; mode / phase
+    dd 0          ; entropy / GOI
+    dd 0          ; consensus (lock)
+    dd 0          ; IO head
+    dd 0          ; graph root index
+    dd 0          ; execution pointer
+    dd 0          ; scratch seed
+
+    times 512 dd 0   ; LATTICE + GRAPH + IO FUSED FIELD
+
 Now there is no “lattice vs graph vs IO”.
 
 There is only:
@@ -47,6 +69,40 @@ omega_step:
     push ecx
     push edi
 2.1 Tick evolution (replaces phi_tick)
+
+    ; Ω[0] = tick
+    inc dword [OMEGA_STATE + 0]
+
+    mov edi, OMEGA_STATE + 32     ; start of field
+    mov ecx, 128
+
+.tick_loop:
+    mov eax, [edi]
+
+    ; single unified evolution rule
+    ; (replaces phi_tick, lattice update, GOI logic)
+    mov ebx, [OMEGA_STATE + 0]    ; tick seed
+
+    imul eax, eax, 3
+    add eax, ebx
+
+    ; GOI/GUZ saturation embedded here (no separate subsystem)
+    cmp eax, 0xFFFF0000
+    jl .ok
+    mov eax, 0xFFFF0000
+.ok:
+
+    mov [edi], eax
+
+    add edi, 4
+    loop .tick_loop
+
+
+
+
+
+    
+
     ; Ω[0] = tick
     inc dword [OMEGA_STATE + 0]
 
@@ -79,6 +135,43 @@ Instead of separate commands that compute things,
 they now project slices of Ω.
 
 3.1 Example: “wave” becomes a projection
+
+
+omega_view_wave:
+    mov esi, OMEGA_STATE + 32
+    mov ecx, 8
+
+.wave_loop:
+    mov eax, [esi]
+
+    and eax, 0xF
+
+    cmp eax, 0
+    je minus
+    cmp eax, 0xF
+    je plus
+    mov al, '0'
+    jmp emit
+
+minus:
+    mov al, '-'
+    jmp emit
+
+plus:
+    mov al, '+'
+
+emit:
+    call .com1_send
+
+    add esi, 16
+    loop .wave_loop
+    ret
+
+
+
+
+
+    
 omega_view_wave:
     mov esi, OMEGA_STATE + 32
     mov ecx, 8
